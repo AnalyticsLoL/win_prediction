@@ -130,7 +130,7 @@ if '__main__' == __name__:
 
     try:
         for i in range(1, 5000):
-            id = regionTag.upper()+"_"+str(7266803975-i)
+            id = regionTag.upper()+"_"+str(7266802472-i)
             print(id)
             start_time = time.time()
             raw_match = get_matchData(route_url, id, riot_key)
