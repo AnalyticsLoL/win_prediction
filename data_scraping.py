@@ -52,6 +52,8 @@ def get_matchData(base_url, matchId, riot_key):
     """
     getMatchUrl = f"{base_url}/lol/match/v5/matches/{matchId}?api_key={riot_key}"
     raw_match = requests.get(getMatchUrl).json()
+    if "status" in raw_match:
+        return {}
     return raw_match
 
 def get_masteryData(base_url, puuid, championId, riot_key):
@@ -120,27 +122,26 @@ if '__main__' == __name__:
 
     regionRoutes = ["americas", "asia", "europe", "esports"]
 
-    gameName = "popcornsucré"
-    tagLine = "pavif"
     regionTag = "euw1"
     regionRoute = regionRoutes[2]
 
     route_url = f"https://{regionRoute}.api.riotgames.com"
     tag_url = f"https://{regionTag}.api.riotgames.com"
 
-    puuid = get_puuid(route_url, gameName, tagLine, riot_key)
-
-    matchIds = get_matchIds(route_url, puuid, 100, riot_key)
-
     try:
-        for id in matchIds:
+        for i in range(1, 5000):
+            id = regionTag.upper()+"_"+str(7266803975-i)
             print(id)
             start_time = time.time()
             raw_match = get_matchData(route_url, id, riot_key)
-            
+            if raw_match == {}:
+                print("Match not existing: skipping to next id")
+                print("---------------------")                
+                continue
+        
             match = []
             for participant in raw_match["info"]["participants"]:
-                masteryData = get_masteryData(tag_url, puuid, participant["championId"], riot_key)
+                masteryData = get_masteryData(tag_url, participant["puuid"], participant["championId"], riot_key)
                 if 'status' in masteryData:
                     masteryData = {"championLevel": 0}
                 else:
