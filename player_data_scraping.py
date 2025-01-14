@@ -25,8 +25,9 @@ tag_url = f"https://{regionTag}.api.riotgames.com"
 getPuuidUrl = f"{route_url}/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}?api_key={riot_key}"
 puuid = requests.get(getPuuidUrl).json()["puuid"]
 
-getMatchIdsUrl = f"{route_url}/lol/match/v5/matches/by-puuid/{puuid}/ids?api_key={riot_key}"
+getMatchIdsUrl = f"{route_url}/lol/match/v5/matches/by-puuid/{puuid}/ids?count=100&api_key={riot_key}"
 matchIds = requests.get(getMatchIdsUrl).json()
+print(len(matchIds))
 
 matches = pd.DataFrame(columns=["MatchId", "Player1", "Player2", "Player3", "Player4", "Player5", "Player6", "Player7", "Player8", "Player9", "Player10", "Win"])
 try:
@@ -48,7 +49,7 @@ try:
             ranks = requests.get(getRankUrl).json()
             found_ranked = False
             for rank in ranks:
-                if rank == "":
+                if type(rank) == str:
                     break
                 if rank.get("queueType") == "RANKED_SOLO_5x5":
                     match.append([participant["championId"], participant["teamPosition"], rank["tier"], rank["rank"], masteryData["championLevel"]])
@@ -61,7 +62,8 @@ try:
         end_time = time.time()
         print(f"Done in {end_time - start_time} seconds")
         print("---------------------")
-except:
+except Exception as e:
+    print(f"An error occurred: {e}")
     pass
 
 full_end_time = time.time()
