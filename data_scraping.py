@@ -52,7 +52,7 @@ async def scrape_data(regionTag, count, id):
     #Get basic urls
     regions = {
         "na1":"americas",
-        "kr1":"asia",
+        "kr":"asia",
         "euw1":"europe"
     }
     route_url = f"https://{regions[regionTag]}.api.riotgames.com"
