@@ -1,14 +1,16 @@
-from transformers import AutoTokenizer, AutoModelForMaskedLM, pipeline, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, pipeline, AutoModelForSequenceClassification, TrainingArguments, Trainer
 from datasets import Dataset
 from langchain_core.prompts import PromptTemplate
 import evaluate
 import os
+import time
+from peft import get_peft_model, LoraConfig, TaskType
 
 class Model:
-    def __init__(self, model_name: str, checkpoint_path: str = None, model_url: str = None):
+    def __init__(self, model_name: str, checkpoint_path: str = None, model_url: str = None, isLora: bool = False):
         self.model_name = model_name
         if checkpoint_path and os.path.exists(checkpoint_path+"/"+self.model_name):
-            self.load_model(checkpoint_path+"/"+self.model_name)
+            self.load_model(checkpoint_path+"/"+(self.model_name if not isLora else self.model_name+"_lora"))
         elif model_url:
             self.load_model(model_url)
             self.update_tokenizer()
@@ -37,7 +39,7 @@ class Model:
         positions = ["TOP", "MIDDLE", "BOTTOM", "JUNGLE", "UTILITY"]
 
         # Combine everything into a vocabulary
-        vocab = champions + tiers + masteries + positions + ranks + ["win", "lose"]
+        vocab = champions + tiers + masteries + positions + ranks + ["win", "lose", "league", "legends", "players", "Predict", "Prediction"]
 
         # Add the custom tokens to the tokenizer
         self.tokenizer.add_tokens(vocab)
@@ -49,16 +51,65 @@ class Model:
         
         return generator(prompt)
     
-    def eval_model(self, testset: Dataset, prompt_template: PromptTemplate) -> dict:
+    def eval_model(self, testset: Dataset) -> dict:
         accuracy = evaluate.load("accuracy")
         
         predictions = []
         references = []
         for test in testset:
-            predictions.append(1 if self.__call__(prompt_template.invoke(test["Player"]).to_string())[0]["label"] == "Win" else 0)
+            predictions.append(1 if self.__call__(test["prompt"])[0]["label"] == "Win" else 0)
             references.append(test["Win"])
             
         return accuracy.compute(predictions=predictions, references=references)
+    
+    def tokenize_data(self, data):
+        output = self.tokenizer(data["prompt"], padding="max_length", truncation=True, return_tensors="pt")
+        output["input_ids"] = output["input_ids"][0]
+        output['labels'] = data["Win"]
+        return output
+    
+    def fine_tune_with_lora(self, data: Dataset):
+        tokenset = data.map(self.tokenize_data)
+        tokenset = tokenset.remove_columns(["token_type_ids", "Win", "prompt"])
+        lora_config = LoraConfig(
+            r=8,  # Rank of LoRA decomposition
+            lora_alpha=32,  # Scaling factor
+            lora_dropout=0.1,  # Dropout probability
+            target_modules=["query", "key", "value"],  # LoRA applied to attention layers
+            bias="none",
+            task_type="SEQ_CLS"
+        )
+        
+        # Apply LoRA to the model
+        peft_model = get_peft_model(self.model, lora_config)
+        
+        output_dir = f'./checkpoints/lora/{self.model_name}_lora_{str(int(time.time()))}'
+        
+        peft_training_args = TrainingArguments(
+            output_dir=output_dir,
+            auto_find_batch_size=True,
+            learning_rate=1e-6, # Higher learning rate than full fine-tuning.
+            weight_decay=0.01,
+            num_train_epochs=20,
+            logging_steps=1,
+            max_steps=20 
+        )
+        
+        peft_trainer = Trainer(
+            model=peft_model,
+            args=peft_training_args,
+            train_dataset=tokenset["train"],
+            eval_dataset=tokenset["test"],
+        )
+        
+        peft_trainer.train()
+        
+        peft_model_path=f"./checkpoints/{self.model_name}_lora"
+
+        peft_trainer.model.save_pretrained(peft_model_path)
+        self.tokenizer.save_pretrained(peft_model_path)
+                
+        print("LoRA fine-tuning done.")
             
             
             
