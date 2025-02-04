@@ -3,3 +3,10 @@ python-dotenv
 requests
 asyncio
 aiohttp
+transformers
+datasets
+torch
+langchain_core
+tokenizer
+evaluate
+scikit-learn
