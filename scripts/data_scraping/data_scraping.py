@@ -119,21 +119,45 @@ async def scrape_data(regionTag, count, id):
             masteryData = responses[participant_idx * 2]
             ranks = responses[participant_idx * 2 + 1]
             
-            if 'status' in masteryData:
-                masteryData = {"championLevel": 0}
-            else:
-                masteryData = {"championLevel": masteryData["championLevel"]}
+            runes = []
+            for style in participant["perks"]["styles"]:
+                style_array = []
+                for selection in style["selections"]:
+                    style_array.append(selection["perk"])
+                runes.append(style_array)
+                    
+            # Extract player features for the match data
+            player_features = [
+                f"champion_{participant['championId']}",
+                participant["teamPosition"] if participant["teamPosition"] else "UNKNOWN",
+                f"mastery_{masteryData['championLevel']}" if 'status' not in masteryData else "mastery_0",
+                runes,
+                "FirstBlood" if (participant["firstBloodKill"] or participant["firstBloodAssist"]) else "NoFirstBlood"
+            ]
             
-            found_ranked = False
+            # Find the player's solo queue rank
+            rank_info = "GOLD_IV"  # Default rank if not found
+            hot_streak = "NoHotStreak"
+            win_rate = "winrate_0.5"  # Default win rate if not found
+            
             for rank in ranks:
-                if type(rank) == str:
+                # Skip if ranks contains an error message (string)
+                if isinstance(rank, str):
                     break
+                # Use solo queue ranking if available
                 if rank.get("queueType") == "RANKED_SOLO_5x5":
-                    match.append(["champion_"+str(participant["championId"]), participant["teamPosition"], "tier_"+str(rank["tier"]), "rank_"+str(rank["rank"]), "mastery_"+str(masteryData["championLevel"])])
-                    found_ranked = True
+                    rank_info = f"{rank['tier']}_{rank['rank']}"
+                    hot_streak = "HotStreak" if rank["hotStreak"] else "NoHotStreak"
+                    win_rate = f"winrate_{round(rank['wins'] / (rank['wins'] + rank['losses']), 2)}" if (rank["wins"] + rank["losses"]) > 0 else "winrate_0.5"
                     break
-            if not found_ranked:
-                match.append(["champion_"+str(participant["championId"]), participant["teamPosition"], "UNRANKED", "UNRANKED", "mastery_"+str(masteryData["championLevel"])])
+            
+            # Insert rank at position 2 (after teamPosition)
+            player_features.insert(2, rank_info)
+            player_features.insert(3, hot_streak)
+            player_features.insert(4, win_rate)
+            
+            # Add player data to match
+            match.append(player_features)
         win = int(not participant["win"])
         save_match(match_id, match, win)
         end_time = time.time()
